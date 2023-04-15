@@ -1,0 +1,24 @@
+{
+  "name": "textimg",
+  "version": "1.0.0",
+  "description": "Text to binary image",
+  "main": "index.ts",
+  "type": "module",
+  "scripts": {
+    "start": "ts-node ."
+  },
+  "keywords": [
+    "image"
+  ],
+  "author": "Eitan Schwartz",
+  "license": "ISC",
+  "dependencies": {
+    "@total-typescript/ts-reset": "^0.4.2",
+    "@types/inquirer": "^9.0.3",
+    "chance": "^1.1.11",
+    "colors": "^1.4.0",
+    "inquirer": "^9.1.5",
+    "jimp": "^0.22.7",
+    "prompt-sync": "^4.2.0"
+  }
+}
