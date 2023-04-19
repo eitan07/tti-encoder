@@ -5,18 +5,31 @@ import inquirer from 'inquirer'
 import fs from 'fs'
 import _p from 'prompt-sync'
 import { fileURLToPath } from 'url'
+import nano from 'nanospinner'
 import 'colors'
 
+
+// Types
+
+type TPreferences = {
+    outputToConsole: {
+        encode: boolean,
+        decode: boolean
+    }
+}
+
+
 // Constants
-export const __filename = fileURLToPath(import.meta.url)
-export const __dirname = dirname(__filename)
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = dirname(__filename)
+const prompt = _p()  // Initialize prompt module
 
 
 // Variables
 let text: string
 let bin: string = ''
+let preferences: TPreferences = JSON.parse(fs.readFileSync(path.join(__dirname, 'preferences.json')).toString('utf8'))
 
-const prompt = _p()  // Initialize prompt moduke
 
 // Methods
 function main_menu() {
@@ -33,6 +46,10 @@ function main_menu() {
                 name: 'Decode',
                 value: 'decode'
             },
+            {
+                name: 'Settings',
+                value: 'settings'
+            },
             new inquirer.Separator(),
             {
                 name: 'Exit',
@@ -46,6 +63,9 @@ function main_menu() {
                 break
             case 'decode':
                 decode()
+                break
+            case 'settings':
+                settings()
                 break
             case 'exit':
                 console.log('Bye.')
@@ -62,12 +82,12 @@ function encode(): void {
         type: 'list',
         choices: [
             {
-                name: 'Prompt (Manually type or paste)',
-                value: 'prompt'
-            },
-            {
                 name: 'From file',
                 value: 'file'
+            },
+            {
+                name: 'Prompt (Manually type or paste)',
+                value: 'prompt'
             },
             new inquirer.Separator(),
             {
@@ -76,48 +96,47 @@ function encode(): void {
             }
         ]
     }).then(result => {
+        let spinner = nano.createSpinner()
+        let startTimestamp: number = 0
+        let broke: boolean = false
+
         switch (result.input_type) {
             case 'prompt':
                 text = prompt('Enter text to encode: ')
+                spinner.start({ text: 'Encoding...' })
+                startTimestamp = Date.now()
                 break
             case 'file':
                 let fileName = prompt('Enter file name or path: ')
                 let localFileRegex = /^[a-zA-Z0-9]+\.[a-zA-Z0-9]+$/
 
+                spinner.start({ text: 'Encoding...' })
+                startTimestamp = Date.now()
+
                 let filePath = localFileRegex.test(fileName) ? path.join(__dirname, fileName) : fileName
                 if (fs.existsSync(filePath)) {
                     text = fs.readFileSync(filePath).toString()
                 } else {
-                    console.error('File does not exist!'.red)
-                    prompt(String(null))
+                    spinner.error({ text: 'File does not exist!'.red })
+                    prompt('')
                     console.clear()
                     main_menu()
                 }
                 break
             case 'main_menu':
                 main_menu()
+                broke = true
                 break
         }
-
-        for (let i = 0; i < text.length; i++) {
-            bin += text.charCodeAt(i).toString(2).padStart(8, '0')
-        }
-
-        inquirer.prompt({
-            name: 'confirmation',
-            message: 'Do you want to print the binary output to the console?',
-            type: 'confirm'
-        }).then(result => {
-            if (result.confirmation) {
-                console.log(`Binary output: ${bin}`)
+        if (!broke) {
+            for (let i = 0; i < text.length; i++) {
+                bin += text.charCodeAt(i).toString(2).padStart(8, '0')
             }
 
             const WIDTH = Math.ceil(Math.sqrt(bin.length))
             const HEIGHT = (WIDTH ** 2 - bin.length > WIDTH) ? WIDTH - Math.floor((WIDTH ** 2 - bin.length) / WIDTH) : WIDTH
 
             const img: Jimp = new Jimp(WIDTH, HEIGHT)
-
-            let startTimestamp = Date.now()
 
             let binDigitIndex: number = 0
             for (let y = 0; y < HEIGHT; y++) {
@@ -149,9 +168,16 @@ function encode(): void {
                 }
             }
 
+            if (preferences.outputToConsole.encode) {
+                console.log(`Output:\n${bin}`)
+            }
+
             img.write(path.join(__dirname, 'out.jpeg'))
-            console.log(`Done. (Took ${Date.now() - startTimestamp}ms)`.green)
-        }).catch(console.error)
+            spinner.success({ text: `  Done. (Took ${Date.now() - startTimestamp}ms)`.green })
+            prompt('')
+            console.clear()
+            main_menu()
+        }
     }).catch(console.error)
 }
 
@@ -161,13 +187,15 @@ function decode(): void {
     let localFileRegex = /^[a-zA-Z0-9]+\.[a-zA-Z0-9]+$/
 
     let filePath = localFileRegex.test(fileName) ? path.join(__dirname, fileName) : fileName
+    let spinner = nano.createSpinner()
 
     if (fs.existsSync(filePath)) {
+
+        let startTimestamp = Date.now()
+
         Jimp.read(fileName).then(img => {
             const WIDTH = img.getWidth()
             const HEIGHT = img.getHeight()
-
-            let startTimestamp = Date.now()
 
             for (let y = 0; y < HEIGHT; y++) {
                 for (let x = 0; x < WIDTH; x++) {
@@ -185,16 +213,59 @@ function decode(): void {
             for (let i = 0; i < bin.length; i += 8) {
                 result += String.fromCharCode(Number.parseInt(bin.substring(i, i + 8), 2))
             }
-            console.log(`Done. (${Date.now() - startTimestamp}ms)`)
+
+            if (preferences.outputToConsole.decode) {
+                console.log(`Output:\n${result}`)
+            }
+
             fs.writeFileSync(path.join(__dirname, 'out.txt'), result)
+            spinner.success({ text: `  Done. (Took ${Date.now() - startTimestamp}ms)` })
+            prompt('')
+            console.clear()
             main_menu()
         })
     } else {
-        console.error('File does not exist!'.red)
-        prompt(String(null))
+        spinner.error({ text: 'File does not exist!'.red })
+        prompt('')
         console.clear()
         main_menu()
     }
+}
+
+function settings() {
+    inquirer.prompt({
+        name: 'settings',
+        message: 'Settings',
+        type: 'checkbox',
+        choices: [
+            {
+                name: 'Output to console (encode)',
+                value: 'encode_output',
+                checked: preferences.outputToConsole.encode
+            },
+            {
+                name: 'Output to console (decode)',
+                value: 'decode_output',
+                checked: preferences.outputToConsole.decode
+            }
+        ]
+    }).then(_res => {
+
+        console.log(preferences.outputToConsole)
+        let result: string[] = _res.settings as string[]
+        let newObj: TPreferences = {
+            outputToConsole: {
+                encode: result.includes('encode_output'),
+                decode: result.includes('decode_output')
+            }
+        }
+
+        preferences = newObj
+        fs.writeFileSync(path.join(__dirname, 'preferences.json'), JSON.stringify(newObj, null, 4))
+
+        console.clear()
+        main_menu()
+    }).catch(console.error)
 }
 
 // --- APPLICATION START ---
