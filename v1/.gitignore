@@ -1,4 +1,5 @@
 node_modules
+.vscode
 in.txt
 out.jpeg
 out.txt
